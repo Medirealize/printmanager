@@ -25,7 +25,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { CHILD_COLOR_OPTIONS, GRADE_OPTIONS } from "@/lib/child-colors"
+import {
+  CHILD_COLOR_OPTIONS,
+  GRADE_OPTIONS,
+  GRADE_OTHER_LABEL,
+  GRADE_OTHER_VALUE,
+  isGradeSelectionValid,
+  resolveGradeValue,
+} from "@/lib/child-colors"
 import {
   createChild,
   deleteChild,
@@ -39,8 +46,12 @@ export default function ChildrenManager() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState("")
-  const [grade, setGrade] = useState("")
+  const [gradeSelect, setGradeSelect] = useState("")
+  const [customGrade, setCustomGrade] = useState("")
   const [color, setColor] = useState<string>(CHILD_COLOR_OPTIONS[0].value)
+
+  const gradeValid = isGradeSelectionValid(gradeSelect, customGrade)
+  const resolvedGrade = resolveGradeValue(gradeSelect, customGrade)
 
   const loadChildren = useCallback(async () => {
     setLoading(true)
@@ -62,19 +73,20 @@ export default function ChildrenManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !grade.trim()) return
+    if (!name.trim() || !gradeValid) return
 
     setSaving(true)
     setError(null)
     try {
       const child = await createChild({
         name: name.trim(),
-        grade: grade.trim(),
+        grade: resolvedGrade,
         color,
       })
       setChildren((prev) => [...prev, child])
       setName("")
-      setGrade("")
+      setGradeSelect("")
+      setCustomGrade("")
       setColor(CHILD_COLOR_OPTIONS[0].value)
     } catch (e) {
       setError(e instanceof Error ? e.message : "登録に失敗しました")
@@ -214,18 +226,46 @@ export default function ChildrenManager() {
                 <Label htmlFor="child-grade" className="text-base">
                   学年
                 </Label>
-                <Select value={grade} onValueChange={setGrade}>
+                <Select
+                  value={gradeSelect}
+                  onValueChange={(value) => {
+                    setGradeSelect(value)
+                    if (value !== GRADE_OTHER_VALUE) setCustomGrade("")
+                  }}
+                >
                   <SelectTrigger id="child-grade" className="h-12 text-base">
                     <SelectValue placeholder="学年を選択" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-72">
                     {GRADE_OPTIONS.map((g) => (
                       <SelectItem key={g} value={g} className="text-base py-3">
                         {g}
                       </SelectItem>
                     ))}
+                    <SelectItem
+                      value={GRADE_OTHER_VALUE}
+                      className="text-base py-3"
+                    >
+                      {GRADE_OTHER_LABEL}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                {gradeSelect === GRADE_OTHER_VALUE && (
+                  <div className="space-y-2 pt-1">
+                    <Label htmlFor="child-grade-custom" className="text-sm text-muted-foreground">
+                      学年を入力
+                    </Label>
+                    <Input
+                      id="child-grade-custom"
+                      value={customGrade}
+                      onChange={(e) => setCustomGrade(e.target.value)}
+                      placeholder="例: 幼稚園年長、専門学校1年"
+                      className="h-12 text-base"
+                      maxLength={30}
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -255,7 +295,7 @@ export default function ChildrenManager() {
               <Button
                 type="submit"
                 className="w-full h-12 text-base"
-                disabled={saving || !name.trim() || !grade}
+                disabled={saving || !name.trim() || !gradeValid}
               >
                 {saving ? (
                   <>
