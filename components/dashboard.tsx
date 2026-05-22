@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect } from "react"
-import { Camera, Plus, ClipboardList, CalendarDays, Newspaper, LayoutGrid, Loader2 } from "lucide-react"
+import Link from "next/link"
+import { Camera, Plus, ClipboardList, CalendarDays, Newspaper, LayoutGrid, Loader2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NotificationBell } from "@/components/notification-bell"
 import { PrintoutList } from "@/components/deadline-list"
@@ -238,11 +240,24 @@ export default function Dashboard() {
                 パシャッと仕分け、締切をまもる!
               </p>
             </div>
-            <NotificationBell
-              notifications={notifications}
-              onMarkAsRead={handleMarkNotificationRead}
-              onClearAll={handleClearAllNotifications}
-            />
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-12 w-12"
+                asChild
+                aria-label="お子さんの登録"
+              >
+                <Link href="/children">
+                  <Users className="h-6 w-6" />
+                </Link>
+              </Button>
+              <NotificationBell
+                notifications={notifications}
+                onMarkAsRead={handleMarkNotificationRead}
+                onClearAll={handleClearAllNotifications}
+              />
+            </div>
           </div>
         </div>
       </header>
@@ -259,6 +274,17 @@ export default function Dashboard() {
               再読み込み
             </Button>
           </div>
+        )}
+
+        {!loading && children.length === 0 && (
+          <Card className="mb-6 p-4 border-dashed">
+            <p className="text-base text-center mb-3">
+              お子さんがまだ登録されていません
+            </p>
+            <Button className="w-full h-12" asChild>
+              <Link href="/children">お子さんを登録する</Link>
+            </Button>
+          </Card>
         )}
 
         {printouts.some((p) => {

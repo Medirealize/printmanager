@@ -3,9 +3,37 @@ import type { Child, Printout, PrintoutCategory } from "@/lib/types"
 
 export async function fetchChildren(): Promise<Child[]> {
   const res = await fetch("/api/children")
-  if (!res.ok) throw new Error("お子さん一覧の取得に失敗しました")
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error ?? "お子さん一覧の取得に失敗しました")
+  }
   const data = await res.json()
   return data.children as Child[]
+}
+
+export async function createChild(payload: {
+  name: string
+  grade: string
+  color: string
+}): Promise<Child> {
+  const res = await fetch("/api/children", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data.error ?? "登録に失敗しました")
+  }
+  return data.child as Child
+}
+
+export async function deleteChild(id: string): Promise<void> {
+  const res = await fetch(`/api/children/${id}`, { method: "DELETE" })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error ?? "削除に失敗しました")
+  }
 }
 
 export async function fetchPrintouts(): Promise<Printout[]> {

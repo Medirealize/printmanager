@@ -29,6 +29,28 @@ export function getMockChildren(): Child[] {
   return [...children]
 }
 
+export function addMockChild(data: {
+  name: string
+  grade: string
+  color: string
+}): Child {
+  const child = mapChildRow({
+    id: `child-${Date.now()}`,
+    name: data.name,
+    grade: data.grade,
+    color: data.color,
+  })
+  children = [...children, child]
+  return child
+}
+
+export function deleteMockChild(id: string): boolean {
+  const before = children.length
+  children = children.filter((c) => c.id !== id)
+  printouts = printouts.filter((p) => p.childId !== id)
+  return children.length < before
+}
+
 export function getMockPrintouts(): Printout[] {
   return [...printouts]
 }
