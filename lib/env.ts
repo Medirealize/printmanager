@@ -5,6 +5,7 @@ const PLACEHOLDER_PATTERNS = [
   "your-project",
   "your-anon-key",
   "your-service-role-key",
+  "your-gemini-api-key",
   "example.com",
 ]
 
@@ -24,5 +25,7 @@ export function isSupabaseConfigured(): boolean {
 }
 
 export function isGeminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY)
+  const key = process.env.GEMINI_API_KEY
+  if (!key || isPlaceholder(key)) return false
+  return key.length > 20
 }

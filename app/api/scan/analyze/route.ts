@@ -1,10 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
-import { analyzePrintoutImage } from "@/lib/gemini"
+import {
+  analyzePrintoutImage,
+  GeminiQuotaExceededError,
+  normalizeImageMimeType,
+} from "@/lib/gemini"
+import {
+  formatGeminiError,
+  GEMINI_QUOTA_FALLBACK_WARNING,
+} from "@/lib/gemini-errors"
 import { isGeminiConfigured } from "@/lib/env"
 import { simulateAIProcessing } from "@/lib/mock-data"
 import type { ChildContext } from "@/lib/ai-processing"
 
 export const maxDuration = 60
+
+function assignChildToResult(
+  result: Awaited<ReturnType<typeof simulateAIProcessing>>,
+  children: ChildContext[]
+) {
+  if (children.length === 0) return result
+  const match =
+    children.find((c) => c.id === result.childId) ??
+    children.find((c) => c.name === result.childId) ??
+    children[0]
+  result.childId = match.id
+  return result
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,36 +45,55 @@ export async function POST(request: NextRequest) {
       children = JSON.parse(childrenRaw) as ChildContext[]
     }
 
-    if (!file.type.startsWith("image/")) {
+    const mimeType = normalizeImageMimeType(file)
+    if (
+      !mimeType.startsWith("image/") &&
+      mimeType !== "image/heic" &&
+      mimeType !== "image/heif"
+    ) {
       return NextResponse.json(
-        { error: "画像ファイルを選択してください" },
+        { error: "画像ファイル（JPEG / PNG など）を選択してください" },
+        { status: 400 }
+      )
+    }
+
+    if (children.length === 0) {
+      return NextResponse.json(
+        { error: "先にお子さんを登録してください" },
         { status: 400 }
       )
     }
 
     if (!isGeminiConfigured()) {
-      const result = await simulateAIProcessing()
-      if (children.length > 0) {
-        const match =
-          children.find((c) => c.id === result.childId) ?? children[0]
-        result.childId = match.id
-      }
+      const result = assignChildToResult(await simulateAIProcessing(), children)
       return NextResponse.json({ result, source: "mock" })
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const base64 = buffer.toString("base64")
-    const result = await analyzePrintoutImage(
-      base64,
-      file.type,
-      children.length > 0 ? children : [{ id: "1", name: "子ども", grade: "" }]
-    )
 
-    return NextResponse.json({ result, source: "gemini" })
+    try {
+      const result = await analyzePrintoutImage(base64, mimeType, children)
+      return NextResponse.json({ result, source: "gemini" })
+    } catch (error) {
+      if (error instanceof GeminiQuotaExceededError) {
+        const result = assignChildToResult(
+          await simulateAIProcessing(),
+          children
+        )
+        return NextResponse.json({
+          result,
+          source: "mock",
+          warning: GEMINI_QUOTA_FALLBACK_WARNING,
+        })
+      }
+      throw error
+    }
   } catch (error) {
     console.error("scan/analyze error:", error)
-    const message =
-      error instanceof Error ? error.message : "解析に失敗しました"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatGeminiError(error) },
+      { status: 500 }
+    )
   }
 }

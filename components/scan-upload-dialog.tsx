@@ -64,6 +64,7 @@ export function ScanUploadDialog({
   const [processingProgress, setProcessingProgress] = useState(0)
   const [aiResult, setAiResult] = useState<AIProcessingResult | null>(null)
   const [processError, setProcessError] = useState<string | null>(null)
+  const [processWarning, setProcessWarning] = useState<string | null>(null)
   
   // Form state for review step
   const [formData, setFormData] = useState({
@@ -88,6 +89,7 @@ export function ScanUploadDialog({
     setProcessingProgress(0)
     setAiResult(null)
     setProcessError(null)
+    setProcessWarning(null)
     setFormData({
       childId: "",
       title: "",
@@ -109,7 +111,10 @@ export function ScanUploadDialog({
   }, [onOpenChange, resetDialog])
 
   const handleFileSelect = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) {
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
+    if (!isImage) {
       alert("画像ファイルを選択してください")
       return
     }
@@ -144,6 +149,7 @@ export function ScanUploadDialog({
     setStep("processing")
     setProcessingProgress(0)
     setProcessError(null)
+    setProcessWarning(null)
 
     const progressInterval = setInterval(() => {
       setProcessingProgress((prev) => {
@@ -161,11 +167,15 @@ export function ScanUploadDialog({
         name: c.name,
         grade: c.grade,
       }))
-      const result = await analyzePrintImage(selectedFile, childContext)
+      const { result, warning } = await analyzePrintImage(
+        selectedFile,
+        childContext
+      )
 
       clearInterval(progressInterval)
       setProcessingProgress(100)
       setAiResult(result)
+      setProcessWarning(warning ?? null)
 
       setFormData({
         childId: result.childId,
@@ -362,7 +372,14 @@ export function ScanUploadDialog({
               </DialogDescription>
             </DialogHeader>
 
-            {aiResult && aiResult.confidence < 0.9 && (
+            {processWarning && (
+              <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                <p className="text-sm leading-snug">{processWarning}</p>
+              </div>
+            )}
+
+            {aiResult && aiResult.confidence < 0.9 && !processWarning && (
               <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
                 <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
                 <p className="text-sm">

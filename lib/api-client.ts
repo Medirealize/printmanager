@@ -82,10 +82,15 @@ export async function patchPrintout(
   return data.printout as Printout
 }
 
+export type AnalyzePrintImageResponse = {
+  result: AIProcessingResult
+  warning?: string
+}
+
 export async function analyzePrintImage(
   file: File,
   children: ChildContext[]
-): Promise<AIProcessingResult> {
+): Promise<AnalyzePrintImageResponse> {
   const formData = new FormData()
   formData.append("image", file)
   formData.append("children", JSON.stringify(children))
@@ -95,5 +100,8 @@ export async function analyzePrintImage(
   if (!res.ok) {
     throw new Error(data.error ?? "AI解析に失敗しました")
   }
-  return data.result as AIProcessingResult
+  return {
+    result: data.result as AIProcessingResult,
+    warning: typeof data.warning === "string" ? data.warning : undefined,
+  }
 }

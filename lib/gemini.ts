@@ -1,8 +1,20 @@
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import type { AIProcessingResult, ChildContext } from "@/lib/ai-processing"
 import type { PrintoutCategory } from "@/lib/types"
+import { isGeminiQuotaError } from "@/lib/gemini-errors"
 
-const MODEL = "gemini-2.0-flash"
+/** クォータの余裕がありやすい順に試行 */
+const MODEL_CANDIDATES = [
+  process.env.GEMINI_MODEL,
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
+].filter((m): m is string => Boolean(m))
+
+function uniqueModels(): string[] {
+  return [...new Set(MODEL_CANDIDATES)]
+}
 
 function buildPrompt(children: ChildContext[]): string {
   const childList = children
@@ -22,7 +34,7 @@ ${childList}
 
 JSONスキーマ:
 {
-  "childId": "お子さんのid（学年・クラス・名前から推測。不明なら最初の子）",
+  "childId": "お子さんのid（必ず上記リストのidを使用）",
   "title": "短いタイトル",
   "category": "todo" | "event" | "info",
   "submissionItem": "提出物（todoのみ）",
@@ -42,7 +54,11 @@ function parseGeminiJson(text: string): Record<string, unknown> {
   const trimmed = text.trim()
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
   const jsonStr = fenced ? fenced[1].trim() : trimmed
-  return JSON.parse(jsonStr) as Record<string, unknown>
+  try {
+    return JSON.parse(jsonStr) as Record<string, unknown>
+  } catch {
+    throw new Error("AIの応答を解析できませんでした。もう一度お試しください。")
+  }
 }
 
 function normalizeCategory(value: unknown): PrintoutCategory {
@@ -50,48 +66,23 @@ function normalizeCategory(value: unknown): PrintoutCategory {
   return "info"
 }
 
-function pickChildId(
-  raw: unknown,
-  children: ChildContext[]
-): string {
-  if (typeof raw === "string" && children.some((c) => c.id === raw)) {
-    return raw
+function pickChildId(raw: unknown, children: ChildContext[]): string {
+  if (typeof raw !== "string" || !raw.trim()) {
+    return children[0]?.id ?? ""
   }
+  const byId = children.find((c) => c.id === raw)
+  if (byId) return byId.id
+  const byName = children.find(
+    (c) => c.name === raw || raw.includes(c.name) || c.name.includes(raw)
+  )
+  if (byName) return byName.id
   return children[0]?.id ?? ""
 }
 
-export async function analyzePrintoutImage(
-  imageBase64: string,
-  mimeType: string,
+function mapParsedToResult(
+  parsed: Record<string, unknown>,
   children: ChildContext[]
-): Promise<AIProcessingResult> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY が設定されていません")
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: MODEL,
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    },
-  })
-
-  const result = await model.generateContent([
-    { text: buildPrompt(children) },
-    {
-      inlineData: {
-        mimeType,
-        data: imageBase64,
-      },
-    },
-  ])
-
-  const text = result.response.text()
-  const parsed = parseGeminiJson(text)
-
+): AIProcessingResult {
   const confidence =
     typeof parsed.confidence === "number"
       ? Math.min(1, Math.max(0, parsed.confidence))
@@ -119,4 +110,89 @@ export async function analyzePrintoutImage(
     notes: typeof parsed.notes === "string" ? parsed.notes : undefined,
     confidence,
   }
+}
+
+export class GeminiQuotaExceededError extends Error {
+  constructor() {
+    super("GEMINI_QUOTA_EXCEEDED")
+    this.name = "GeminiQuotaExceededError"
+  }
+}
+
+async function analyzeWithModel(
+  apiKey: string,
+  modelName: string,
+  imageBase64: string,
+  mimeType: string,
+  children: ChildContext[]
+): Promise<AIProcessingResult> {
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+    },
+  })
+
+  const result = await model.generateContent([
+    { text: buildPrompt(children) },
+    {
+      inlineData: {
+        mimeType,
+        data: imageBase64,
+      },
+    },
+  ])
+
+  const text = result.response.text()
+  return mapParsedToResult(parseGeminiJson(text), children)
+}
+
+export async function analyzePrintoutImage(
+  imageBase64: string,
+  mimeType: string,
+  children: ChildContext[]
+): Promise<AIProcessingResult> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY が設定されていません")
+  }
+
+  const models = uniqueModels()
+  let lastError: unknown = null
+  let sawQuota = false
+
+  for (const modelName of models) {
+    try {
+      return await analyzeWithModel(
+        apiKey,
+        modelName,
+        imageBase64,
+        mimeType,
+        children
+      )
+    } catch (error) {
+      lastError = error
+      if (isGeminiQuotaError(error)) {
+        sawQuota = true
+        continue
+      }
+      throw error
+    }
+  }
+
+  if (sawQuota) {
+    throw new GeminiQuotaExceededError()
+  }
+  throw lastError ?? new Error("AI解析に失敗しました")
+}
+
+export function normalizeImageMimeType(file: { type: string; name: string }): string {
+  if (file.type.startsWith("image/")) return file.type
+  const ext = file.name.split(".").pop()?.toLowerCase()
+  if (ext === "heic" || ext === "heif") return "image/heic"
+  if (ext === "png") return "image/png"
+  if (ext === "webp") return "image/webp"
+  return "image/jpeg"
 }
