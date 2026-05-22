@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Loader2, Trash2, UserPlus } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, CheckCircle2, Loader2, Trash2, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -40,30 +41,61 @@ import {
 } from "@/lib/api-client"
 import type { Child } from "@/lib/types"
 
+function nextColor(current: string): string {
+  const idx = CHILD_COLOR_OPTIONS.findIndex((c) => c.value === current)
+  const next = CHILD_COLOR_OPTIONS[(idx + 1) % CHILD_COLOR_OPTIONS.length]
+  return next.value
+}
+
 export default function ChildrenManager() {
+  const router = useRouter()
   const [children, setChildren] = useState<Child[]>([])
-  const [loading, setLoading] = useState(true)
+  const [listLoading, setListLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [name, setName] = useState("")
   const [gradeSelect, setGradeSelect] = useState("")
   const [customGrade, setCustomGrade] = useState("")
   const [color, setColor] = useState<string>(CHILD_COLOR_OPTIONS[0].value)
 
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const loadGenerationRef = useRef(0)
+
   const gradeValid = isGradeSelectionValid(gradeSelect, customGrade)
   const resolvedGrade = resolveGradeValue(gradeSelect, customGrade)
 
-  const loadChildren = useCallback(async () => {
-    setLoading(true)
+  const resetForm = useCallback(
+    (options?: { keepGrade?: boolean; rotateColor?: boolean }) => {
+      setName("")
+      if (!options?.keepGrade) {
+        setGradeSelect("")
+        setCustomGrade("")
+      }
+      if (options?.rotateColor) {
+        setColor((c) => nextColor(c))
+      }
+    },
+    []
+  )
+
+  const loadChildren = useCallback(async (silent = false) => {
+    const generation = ++loadGenerationRef.current
+    if (!silent) setListLoading(true)
     setError(null)
     try {
-      setChildren(await fetchChildren())
+      const data = await fetchChildren()
+      if (generation !== loadGenerationRef.current) return
+      setChildren(data)
     } catch (e) {
+      if (generation !== loadGenerationRef.current) return
       setError(
         e instanceof Error ? e.message : "お子さん一覧の読み込みに失敗しました"
       )
     } finally {
-      setLoading(false)
+      if (generation === loadGenerationRef.current && !silent) {
+        setListLoading(false)
+      }
     }
   }, [])
 
@@ -71,23 +103,29 @@ export default function ChildrenManager() {
     loadChildren()
   }, [loadChildren])
 
+  const focusNameInput = () => {
+    requestAnimationFrame(() => nameInputRef.current?.focus())
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || !gradeValid) return
 
+    const registeredName = name.trim()
     setSaving(true)
     setError(null)
+    setSuccessMessage(null)
     try {
-      const child = await createChild({
-        name: name.trim(),
+      await createChild({
+        name: registeredName,
         grade: resolvedGrade,
         color,
       })
-      setChildren((prev) => [...prev, child])
-      setName("")
-      setGradeSelect("")
-      setCustomGrade("")
-      setColor(CHILD_COLOR_OPTIONS[0].value)
+      await loadChildren(true)
+      resetForm({ keepGrade: true, rotateColor: true })
+      setSuccessMessage(`${registeredName}さんを登録しました。続けて登録できます。`)
+      router.refresh()
+      focusNameInput()
     } catch (e) {
       setError(e instanceof Error ? e.message : "登録に失敗しました")
     } finally {
@@ -97,9 +135,11 @@ export default function ChildrenManager() {
 
   const handleDelete = async (id: string) => {
     setError(null)
+    setSuccessMessage(null)
     try {
       await deleteChild(id)
-      setChildren((prev) => prev.filter((c) => c.id !== id))
+      await loadChildren(true)
+      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "削除に失敗しました")
     }
@@ -117,7 +157,7 @@ export default function ChildrenManager() {
           <div>
             <h1 className="text-xl font-bold">お子さんの登録</h1>
             <p className="text-sm text-muted-foreground">
-              名前と学年を登録すると、プリントの仕分けに使えます
+              登録後もこの画面で続けて追加できます
             </p>
           </div>
         </div>
@@ -137,70 +177,14 @@ export default function ChildrenManager() {
           </div>
         )}
 
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-3">登録済み</h2>
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : children.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              まだ登録がありません。下のフォームから追加してください。
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {children.map((child) => (
-                <li key={child.id}>
-                  <Card className="p-4 flex items-center gap-3">
-                    <span
-                      className={`w-4 h-4 rounded-full flex-shrink-0 ${child.color}`}
-                      aria-hidden
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-lg">{child.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {child.grade}
-                      </p>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:text-destructive"
-                          aria-label={`${child.name}を削除`}
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            {child.name}さんを削除しますか？
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            このお子さんに紐づくプリントも削除されます。この操作は取り消せません。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            onClick={() => handleDelete(child.id)}
-                          >
-                            削除する
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </Card>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {successMessage && (
+          <div className="mb-4 p-3 rounded-lg bg-success/10 border border-success/30 text-success text-sm flex items-start gap-2">
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <span>{successMessage}</span>
+          </div>
+        )}
 
-        <section>
+        <section className="mb-8">
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
             新しく登録
@@ -212,6 +196,7 @@ export default function ChildrenManager() {
                   お名前
                 </Label>
                 <Input
+                  ref={nameInputRef}
                   id="child-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -219,6 +204,7 @@ export default function ChildrenManager() {
                   className="h-12 text-base"
                   maxLength={20}
                   required
+                  autoComplete="off"
                 />
               </div>
 
@@ -252,7 +238,10 @@ export default function ChildrenManager() {
                 </Select>
                 {gradeSelect === GRADE_OTHER_VALUE && (
                   <div className="space-y-2 pt-1">
-                    <Label htmlFor="child-grade-custom" className="text-sm text-muted-foreground">
+                    <Label
+                      htmlFor="child-grade-custom"
+                      className="text-sm text-muted-foreground"
+                    >
                       学年を入力
                     </Label>
                     <Input
@@ -308,6 +297,71 @@ export default function ChildrenManager() {
               </Button>
             </form>
           </Card>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold mb-3">
+            登録済み（{children.length}人）
+          </h2>
+          {listLoading && children.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : children.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">
+              まだ登録がありません。上のフォームから追加してください。
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {children.map((child) => (
+                <li key={child.id}>
+                  <Card className="p-4 flex items-center gap-3">
+                    <span
+                      className={`w-4 h-4 rounded-full flex-shrink-0 ${child.color}`}
+                      aria-hidden
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-lg">{child.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {child.grade}
+                      </p>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`${child.name}を削除`}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {child.name}さんを削除しますか？
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            このお子さんに紐づくプリントも削除されます。この操作は取り消せません。
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => handleDelete(child.id)}
+                          >
+                            削除する
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </main>
     </div>

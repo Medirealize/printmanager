@@ -2,7 +2,7 @@ import type { AIProcessingResult, ChildContext } from "@/lib/ai-processing"
 import type { Child, Printout, PrintoutCategory } from "@/lib/types"
 
 export async function fetchChildren(): Promise<Child[]> {
-  const res = await fetch("/api/children")
+  const res = await fetch("/api/children", { cache: "no-store" })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     throw new Error(data.error ?? "お子さん一覧の取得に失敗しました")
@@ -25,6 +25,9 @@ export async function createChild(payload: {
   if (!res.ok) {
     throw new Error(data.error ?? "登録に失敗しました")
   }
+  if (!data.child?.id) {
+    throw new Error("登録レスポンスが不正です")
+  }
   return data.child as Child
 }
 
@@ -37,7 +40,7 @@ export async function deleteChild(id: string): Promise<void> {
 }
 
 export async function fetchPrintouts(): Promise<Printout[]> {
-  const res = await fetch("/api/printouts")
+  const res = await fetch("/api/printouts", { cache: "no-store" })
   if (!res.ok) throw new Error("プリント一覧の取得に失敗しました")
   const data = await res.json()
   return data.printouts as Printout[]
