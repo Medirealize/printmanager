@@ -4,6 +4,7 @@ import { DEFAULT_HOUSEHOLD_ID } from "@/lib/env"
 import { CHILD_COLOR_OPTIONS } from "@/lib/child-colors"
 import { mapChildRow } from "@/lib/db-mappers"
 import { addMockChild, getMockChildren } from "@/lib/mock-store"
+import { formatSupabaseError } from "@/lib/supabase/errors"
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 
 const colorValues = CHILD_COLOR_OPTIONS.map((c) => c.value)
@@ -39,7 +40,10 @@ export async function GET() {
     .order("sort_order", { ascending: true })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({
@@ -86,7 +90,10 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json(

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { DEFAULT_HOUSEHOLD_ID } from "@/lib/env"
 import { mapPrintoutRow } from "@/lib/db-mappers"
 import { addMockPrintout, getMockPrintouts } from "@/lib/mock-store"
+import { formatSupabaseError } from "@/lib/supabase/errors"
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 
 const createSchema = z.object({
@@ -31,7 +32,10 @@ export async function GET() {
     .order("created_at", { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({
@@ -80,7 +84,10 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json(

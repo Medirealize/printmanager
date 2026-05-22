@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { mapPrintoutRow } from "@/lib/db-mappers"
 import { updateMockPrintout } from "@/lib/mock-store"
+import { formatSupabaseError } from "@/lib/supabase/errors"
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 
 const patchSchema = z.object({
@@ -40,7 +41,10 @@ export async function PATCH(
     .single()
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ printout: mapPrintoutRow(data), source: "supabase" })

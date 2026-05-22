@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { DEFAULT_HOUSEHOLD_ID } from "@/lib/env"
 import { deleteMockChild } from "@/lib/mock-store"
+import { formatSupabaseError } from "@/lib/supabase/errors"
 import { getSupabaseAdmin } from "@/lib/supabase/server"
 
 export async function DELETE(
@@ -25,7 +26,10 @@ export async function DELETE(
     .eq("household_id", DEFAULT_HOUSEHOLD_ID)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: formatSupabaseError(error), code: error.code },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ success: true, source: "supabase" })

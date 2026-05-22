@@ -41,6 +41,10 @@ import {
 } from "@/lib/api-client"
 import type { Child } from "@/lib/types"
 
+function isSetupRequiredMessage(message: string): boolean {
+  return message.includes("schema.sql") || message.includes("テーブルがありません")
+}
+
 function nextColor(current: string): string {
   const idx = CHILD_COLOR_OPTIONS.findIndex((c) => c.value === current)
   const next = CHILD_COLOR_OPTIONS[(idx + 1) % CHILD_COLOR_OPTIONS.length]
@@ -165,15 +169,46 @@ export default function ChildrenManager() {
 
       <main className="container mx-auto px-4 py-6 pb-12 max-w-lg">
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-            {error}
-            <Button
-              variant="link"
-              className="ml-2 h-auto p-0 text-destructive"
-              onClick={() => loadChildren()}
-            >
-              再読み込み
-            </Button>
+          <div className="mb-4 space-y-3">
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+              {error}
+              <Button
+                variant="link"
+                className="ml-2 h-auto p-0 text-destructive"
+                onClick={() => loadChildren()}
+              >
+                再読み込み
+              </Button>
+            </div>
+            {isSetupRequiredMessage(error) && (
+              <Card className="p-4 bg-muted/50 border-primary/20">
+                <p className="font-semibold text-base mb-2">Supabase の初期設定</p>
+                <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>
+                    <a
+                      href="https://supabase.com/dashboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Supabase ダッシュボード
+                    </a>
+                    を開く
+                  </li>
+                  <li>
+                    左メニュー <strong>SQL Editor</strong> → New query
+                  </li>
+                  <li>
+                    プロジェクトの{" "}
+                    <code className="text-xs bg-muted px-1 rounded">
+                      supabase/schema.sql
+                    </code>{" "}
+                    の内容をすべて貼り付けて <strong>Run</strong>
+                  </li>
+                  <li>完了後、このページで「再読み込み」</li>
+                </ol>
+              </Card>
+            )}
           </div>
         )}
 
