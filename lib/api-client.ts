@@ -108,6 +108,7 @@ export async function deletePrintout(id: string): Promise<void> {
 export type AnalyzePrintImageResponse = {
   result: AIProcessingResult
   warning?: string
+  source?: "gemini" | "mock"
 }
 
 export async function analyzePrintImage(
@@ -126,5 +127,6 @@ export async function analyzePrintImage(
   return {
     result: data.result as AIProcessingResult,
     warning: typeof data.warning === "string" ? data.warning : undefined,
+    source: data.source === "gemini" || data.source === "mock" ? data.source : undefined,
   }
 }

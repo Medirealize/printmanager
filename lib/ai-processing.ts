@@ -12,6 +12,10 @@ export interface AIProcessingResult {
   summary?: string
   notes?: string
   confidence: number
+  /** この写真で読み取りが難しい具体的な理由（AIが画像を見て判定） */
+  qualityIssues?: string[]
+  /** この写真を改善するための具体的なアドバイス */
+  improvementTips?: string[]
 }
 
 export interface ChildContext {

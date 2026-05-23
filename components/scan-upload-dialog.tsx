@@ -26,6 +26,7 @@ import { Child, PrintoutCategory } from "@/lib/types"
 import type { AIProcessingResult } from "@/lib/ai-processing"
 import { analyzePrintImage } from "@/lib/api-client"
 import { LowConfidenceNotice } from "@/components/low-confidence-notice"
+import { LOW_CONFIDENCE_THRESHOLD } from "@/lib/ai-confidence-help"
 
 interface ScanUploadDialogProps {
   open: boolean
@@ -69,6 +70,9 @@ export function ScanUploadDialog({
   const [aiResult, setAiResult] = useState<AIProcessingResult | null>(null)
   const [processError, setProcessError] = useState<string | null>(null)
   const [processWarning, setProcessWarning] = useState<string | null>(null)
+  const [analysisSource, setAnalysisSource] = useState<"gemini" | "mock" | null>(
+    null
+  )
   
   // Form state for review step
   const [formData, setFormData] = useState({
@@ -94,6 +98,7 @@ export function ScanUploadDialog({
     setAiResult(null)
     setProcessError(null)
     setProcessWarning(null)
+    setAnalysisSource(null)
     setFormData({
       childId: "",
       title: "",
@@ -179,7 +184,7 @@ export function ScanUploadDialog({
         name: c.name,
         grade: c.grade,
       }))
-      const { result, warning } = await analyzePrintImage(
+      const { result, warning, source } = await analyzePrintImage(
         selectedFile,
         childContext
       )
@@ -188,6 +193,7 @@ export function ScanUploadDialog({
       setProcessingProgress(100)
       setAiResult(result)
       setProcessWarning(warning ?? null)
+      setAnalysisSource(source ?? null)
 
       setFormData({
         childId: result.childId,
@@ -391,9 +397,27 @@ export function ScanUploadDialog({
               </div>
             )}
 
-            {aiResult && aiResult.confidence < 0.9 && !processWarning && (
-              <LowConfidenceNotice />
-            )}
+            {aiResult &&
+              aiResult.confidence < LOW_CONFIDENCE_THRESHOLD &&
+              !processWarning &&
+              analysisSource === "gemini" && (
+                <LowConfidenceNotice
+                  qualityIssues={aiResult.qualityIssues}
+                  improvementTips={aiResult.improvementTips}
+                />
+              )}
+
+            {aiResult &&
+              aiResult.confidence < LOW_CONFIDENCE_THRESHOLD &&
+              !processWarning &&
+              analysisSource === "mock" && (
+                <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                  <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-sm leading-snug">
+                    デモ／サンプルデータのため、この写真の問題点は分析していません。内容を確認・修正するか、AIが使える状態で再撮影してください。
+                  </p>
+                </div>
+              )}
             
             <div className="space-y-4 py-4">
               {/* 共通フィールド */}

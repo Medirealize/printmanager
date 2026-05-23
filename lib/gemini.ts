@@ -44,10 +44,26 @@ JSONスキーマ:
   "parentPreparation": "親の持ち物・準備（eventのみ）",
   "summary": "概要（infoのみ）",
   "notes": "補足メモ",
-  "confidence": 0.0〜1.0
+  "confidence": 0.0〜1.0,
+  "qualityIssues": ["この画像だけに当てはまる問題を日本語で。例: 写真左側が暗く左下の文字が読みにくい、手前がピンボケしている。読み取りに支障がなければ空配列[]"],
+  "improvementTips": ["qualityIssuesに対応した、この写真を改善するための具体的な再撮影アドバイス。qualityIssuesが空なら空配列[]"]
 }
 
+重要:
+- qualityIssues / improvementTips は必ず添付画像を見て判断し、一般的な注意書きは書かないこと
+- 実際に写っている問題（影の位置、ぼけ、斜め、折れ、指の映り込み、切れている箇所など）だけを具体的に書くこと
+- confidenceが0.9未満のときは、qualityIssuesを必ず1件以上含めること
+
 日付は今日以降で合理的な値にしてください。読み取れない項目はnullにしてください。`
+}
+
+function parseStringArray(value: unknown, max = 6): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, max)
 }
 
 function parseGeminiJson(text: string): Record<string, unknown> {
@@ -109,6 +125,8 @@ function mapParsedToResult(
     summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
     notes: typeof parsed.notes === "string" ? parsed.notes : undefined,
     confidence,
+    qualityIssues: parseStringArray(parsed.qualityIssues),
+    improvementTips: parseStringArray(parsed.improvementTips, 4),
   }
 }
 
