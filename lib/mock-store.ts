@@ -90,11 +90,60 @@ export function addMockPrintout(data: {
 
 export function updateMockPrintout(
   id: string,
-  patch: Partial<Pick<Printout, "status" | "pinned">>
+  patch: Partial<
+    Pick<
+      Printout,
+      | "childId"
+      | "title"
+      | "category"
+      | "submissionItem"
+      | "deadline"
+      | "eventDate"
+      | "eventTime"
+      | "parentPreparation"
+      | "summary"
+      | "notes"
+      | "status"
+      | "pinned"
+    >
+  >
 ): Printout | null {
   const idx = printouts.findIndex((p) => p.id === id)
   if (idx < 0) return null
-  const updated = { ...printouts[idx], ...patch }
+  let updated = { ...printouts[idx], ...patch }
+
+  if (patch.category === "todo") {
+    updated = {
+      ...updated,
+      eventDate: undefined,
+      eventTime: undefined,
+      parentPreparation: undefined,
+      summary: undefined,
+    }
+  } else if (patch.category === "event") {
+    updated = {
+      ...updated,
+      submissionItem: undefined,
+      deadline: undefined,
+      summary: undefined,
+    }
+  } else if (patch.category === "info") {
+    updated = {
+      ...updated,
+      submissionItem: undefined,
+      deadline: undefined,
+      eventDate: undefined,
+      eventTime: undefined,
+      parentPreparation: undefined,
+    }
+  }
+
   printouts = [...printouts.slice(0, idx), updated, ...printouts.slice(idx + 1)]
   return updated
+}
+
+export function deleteMockPrintout(id: string): boolean {
+  const before = printouts.length
+  printouts = printouts.filter((p) => p.id !== id)
+  return printouts.length < before
 }

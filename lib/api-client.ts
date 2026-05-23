@@ -70,16 +70,39 @@ export async function createPrintout(payload: {
 
 export async function patchPrintout(
   id: string,
-  patch: { status?: Printout["status"]; pinned?: boolean }
+  patch: {
+    childId?: string
+    title?: string
+    category?: PrintoutCategory
+    submissionItem?: string
+    deadline?: string
+    eventDate?: string
+    eventTime?: string
+    parentPreparation?: string
+    summary?: string
+    notes?: string
+    status?: Printout["status"]
+    pinned?: boolean
+  }
 ): Promise<Printout> {
   const res = await fetch(`/api/printouts/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   })
-  if (!res.ok) throw new Error("更新に失敗しました")
   const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data.error ?? "更新に失敗しました")
+  }
   return data.printout as Printout
+}
+
+export async function deletePrintout(id: string): Promise<void> {
+  const res = await fetch(`/api/printouts/${id}`, { method: "DELETE" })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error ?? "削除に失敗しました")
+  }
 }
 
 export type AnalyzePrintImageResponse = {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Upload, Camera, Loader2, Check, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,11 +25,14 @@ import { Progress } from "@/components/ui/progress"
 import { Child, PrintoutCategory } from "@/lib/types"
 import type { AIProcessingResult } from "@/lib/ai-processing"
 import { analyzePrintImage } from "@/lib/api-client"
+import { LowConfidenceNotice } from "@/components/low-confidence-notice"
 
 interface ScanUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   children: Child[]
+  /** 写真アプリなどから選んだ画像 */
+  initialFile?: File | null
   onSave: (data: {
     childId: string
     title: string
@@ -56,6 +59,7 @@ export function ScanUploadDialog({
   open,
   onOpenChange,
   children,
+  initialFile = null,
   onSave,
 }: ScanUploadDialogProps) {
   const [step, setStep] = useState<DialogStep>("upload")
@@ -119,9 +123,17 @@ export function ScanUploadDialog({
       return
     }
     setSelectedFile(file)
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
   }, [])
+
+  useEffect(() => {
+    if (open && initialFile) {
+      handleFileSelect(initialFile)
+    }
+  }, [open, initialFile, handleFileSelect])
 
   const handleFileInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -380,12 +392,7 @@ export function ScanUploadDialog({
             )}
 
             {aiResult && aiResult.confidence < 0.9 && !processWarning && (
-              <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/30 rounded-lg">
-                <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
-                <p className="text-sm">
-                  AIの読み取り精度が通常より低いです。内容をご確認ください。
-                </p>
-              </div>
+              <LowConfidenceNotice />
             )}
             
             <div className="space-y-4 py-4">

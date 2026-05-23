@@ -1,17 +1,30 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Camera, Plus, ClipboardList, CalendarDays, Newspaper, LayoutGrid, Loader2, Users } from "lucide-react"
+import {
+  Camera,
+  Plus,
+  ClipboardList,
+  CalendarDays,
+  Newspaper,
+  LayoutGrid,
+  Loader2,
+  Users,
+  ImageUp,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NotificationBell } from "@/components/notification-bell"
 import { PrintoutList } from "@/components/deadline-list"
 import { ScanUploadDialog } from "@/components/scan-upload-dialog"
+import { PrintoutEditDialog } from "@/components/printout-edit-dialog"
+import { formStateToPayload } from "@/components/printout-form-fields"
 import { Child, Printout, Notification, PrintoutCategory } from "@/lib/types"
 import {
   createPrintout,
+  deletePrintout,
   fetchChildren,
   fetchPrintouts,
   patchPrintout,
@@ -24,8 +37,12 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string>("all")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [scanDialogOpen, setScanDialogOpen] = useState(false)
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null)
+  const [editingPrintout, setEditingPrintout] = useState<Printout | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -176,6 +193,45 @@ export default function Dashboard() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }, [])
 
+  const handleEditPrintout = useCallback((printout: Printout) => {
+    setEditingPrintout(printout)
+    setEditDialogOpen(true)
+  }, [])
+
+  const handleUpdatePrintout = useCallback(
+    async (id: string, data: ReturnType<typeof formStateToPayload>) => {
+      try {
+        const updated = await patchPrintout(id, data)
+        setPrintouts((prev) => prev.map((p) => (p.id === id ? updated : p)))
+      } catch {
+        setError("プリントの更新に失敗しました")
+        throw new Error("update failed")
+      }
+    },
+    []
+  )
+
+  const handleDeletePrintout = useCallback(async (id: string) => {
+    try {
+      await deletePrintout(id)
+      setPrintouts((prev) => prev.filter((p) => p.id !== id))
+    } catch {
+      setError("プリントの削除に失敗しました")
+    }
+  }, [])
+
+  const handleGallerySelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        setPendingUploadFile(file)
+        setScanDialogOpen(true)
+      }
+      e.target.value = ""
+    },
+    []
+  )
+
   const handleSavePrintout = useCallback(
     async (data: {
       childId: string
@@ -276,7 +332,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 pb-24">
+      <main className="container mx-auto px-4 py-6 pb-36">
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
             {error}
@@ -416,6 +472,8 @@ export default function Dashboard() {
                 children={children}
                 onToggleComplete={handleToggleComplete}
                 onTogglePin={handleTogglePin}
+                onEdit={handleEditPrintout}
+                onDelete={handleDeletePrintout}
                 filterCategory={
                   categoryFilter === "all"
                     ? undefined
@@ -437,6 +495,8 @@ export default function Dashboard() {
                   children={children}
                   onToggleComplete={handleToggleComplete}
                   onTogglePin={handleTogglePin}
+                  onEdit={handleEditPrintout}
+                  onDelete={handleDeletePrintout}
                   filterChildId={child.id}
                   filterCategory={
                     categoryFilter === "all"
@@ -450,9 +510,30 @@ export default function Dashboard() {
         </Tabs>
       </main>
 
-      <div className="fixed bottom-6 left-0 right-0 px-4 z-50">
+      <div className="fixed bottom-6 left-0 right-0 px-4 z-50 flex flex-col gap-2">
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          aria-hidden
+          onChange={handleGallerySelect}
+        />
         <Button
-          onClick={() => setScanDialogOpen(true)}
+          variant="outline"
+          size="lg"
+          className="w-full h-12 text-base font-semibold bg-background shadow-md"
+          disabled={children.length === 0}
+          onClick={() => galleryInputRef.current?.click()}
+        >
+          <ImageUp className="h-5 w-5 mr-2" />
+          画像をアップロード
+        </Button>
+        <Button
+          onClick={() => {
+            setPendingUploadFile(null)
+            setScanDialogOpen(true)
+          }}
           size="lg"
           className="w-full h-14 text-lg font-semibold shadow-lg hover:shadow-xl transition-shadow"
           disabled={children.length === 0}
@@ -465,9 +546,21 @@ export default function Dashboard() {
 
       <ScanUploadDialog
         open={scanDialogOpen}
-        onOpenChange={setScanDialogOpen}
+        onOpenChange={(open) => {
+          setScanDialogOpen(open)
+          if (!open) setPendingUploadFile(null)
+        }}
+        initialFile={pendingUploadFile}
         children={children}
         onSave={handleSavePrintout}
+      />
+
+      <PrintoutEditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        printout={editingPrintout}
+        children={children}
+        onSave={handleUpdatePrintout}
       />
     </div>
   )

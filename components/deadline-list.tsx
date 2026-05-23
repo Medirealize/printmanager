@@ -21,12 +21,15 @@ import {
   Clock,
   ShoppingBag
 } from "lucide-react"
+import { PrintoutCardActions } from "@/components/printout-card-actions"
 
 interface PrintoutCardProps {
   printout: Printout
   child: Child
   onToggleComplete: (id: string) => void
   onTogglePin?: (id: string) => void
+  onEdit?: (printout: Printout) => void
+  onDelete?: (id: string) => void
 }
 
 function getDaysUntilDate(dateStr?: string): number {
@@ -80,8 +83,35 @@ const categoryConfig: Record<PrintoutCategory, {
   },
 }
 
+function CardHeaderRow({
+  printout,
+  onEdit,
+  onDelete,
+}: {
+  printout: Printout
+  onEdit?: (printout: Printout) => void
+  onDelete?: (id: string) => void
+}) {
+  if (!onEdit || !onDelete) return null
+  return (
+    <div className="flex justify-end -mt-1 -mr-1 mb-1">
+      <PrintoutCardActions
+        printout={printout}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    </div>
+  )
+}
+
 // 提出物（Todo）カード
-function TodoCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
+function TodoCard({
+  printout,
+  child,
+  onToggleComplete,
+  onEdit,
+  onDelete,
+}: PrintoutCardProps) {
   const [showNotes, setShowNotes] = useState(false)
   const daysLeft = getDaysUntilDate(printout.deadline)
   const isUrgent = daysLeft <= 3 && printout.status !== "completed"
@@ -154,6 +184,7 @@ function TodoCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
 
   return (
     <Card className={`p-4 transition-all duration-200 border-l-4 ${config.borderColor} ${getUrgencyStyles()} ${isCompleted ? "opacity-70" : ""}`}>
+      <CardHeaderRow printout={printout} onEdit={onEdit} onDelete={onDelete} />
       <div className="flex items-start gap-4">
         <div className="pt-1">
           <Checkbox
@@ -212,7 +243,13 @@ function TodoCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
 }
 
 // 行事（Event）カード
-function EventCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
+function EventCard({
+  printout,
+  child,
+  onToggleComplete,
+  onEdit,
+  onDelete,
+}: PrintoutCardProps) {
   const [showNotes, setShowNotes] = useState(false)
   const daysUntil = getDaysUntilDate(printout.eventDate)
   const isCompleted = printout.status === "completed"
@@ -264,6 +301,7 @@ function EventCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
 
   return (
     <Card className={`p-4 transition-all duration-200 border-l-4 ${config.borderColor} ${config.bgColor} ${isCompleted ? "opacity-70" : ""}`}>
+      <CardHeaderRow printout={printout} onEdit={onEdit} onDelete={onDelete} />
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -278,7 +316,7 @@ function EventCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
           <h3 className={`text-lg font-semibold mb-2 ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
             {printout.title}
           </h3>
-          
+
           {/* 開催日時 */}
           <div className="flex items-center gap-2 text-base mb-1">
             <CalendarDays className="h-4 w-4 text-chart-2" />
@@ -328,12 +366,19 @@ function EventCard({ printout, child, onToggleComplete }: PrintoutCardProps) {
 }
 
 // お便り（Info）カード
-function InfoCard({ printout, child, onTogglePin }: PrintoutCardProps) {
+function InfoCard({
+  printout,
+  child,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: PrintoutCardProps) {
   const config = categoryConfig.info
   const isPinned = printout.pinned
 
   return (
     <Card className={`p-4 transition-all duration-200 border-l-4 ${config.borderColor} ${config.bgColor} ${isPinned ? "ring-1 ring-chart-4/30" : ""}`}>
+      <CardHeaderRow printout={printout} onEdit={onEdit} onDelete={onDelete} />
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -390,16 +435,56 @@ function InfoCard({ printout, child, onTogglePin }: PrintoutCardProps) {
 }
 
 // メインのカードコンポーネント
-export function PrintoutCard({ printout, child, onToggleComplete, onTogglePin }: PrintoutCardProps) {
+export function PrintoutCard({
+  printout,
+  child,
+  onToggleComplete,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: PrintoutCardProps) {
   switch (printout.category) {
     case "todo":
-      return <TodoCard printout={printout} child={child} onToggleComplete={onToggleComplete} />
+      return (
+        <TodoCard
+          printout={printout}
+          child={child}
+          onToggleComplete={onToggleComplete}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )
     case "event":
-      return <EventCard printout={printout} child={child} onToggleComplete={onToggleComplete} />
+      return (
+        <EventCard
+          printout={printout}
+          child={child}
+          onToggleComplete={onToggleComplete}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )
     case "info":
-      return <InfoCard printout={printout} child={child} onToggleComplete={onToggleComplete} onTogglePin={onTogglePin} />
+      return (
+        <InfoCard
+          printout={printout}
+          child={child}
+          onToggleComplete={onToggleComplete}
+          onTogglePin={onTogglePin}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )
     default:
-      return <TodoCard printout={printout} child={child} onToggleComplete={onToggleComplete} />
+      return (
+        <TodoCard
+          printout={printout}
+          child={child}
+          onToggleComplete={onToggleComplete}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )
   }
 }
 
@@ -408,6 +493,8 @@ interface PrintoutListProps {
   children: Child[]
   onToggleComplete: (id: string) => void
   onTogglePin?: (id: string) => void
+  onEdit?: (printout: Printout) => void
+  onDelete?: (id: string) => void
   filterChildId?: string | null
   filterCategory?: PrintoutCategory
   showCompleted?: boolean
@@ -418,6 +505,8 @@ export function PrintoutList({
   children,
   onToggleComplete,
   onTogglePin,
+  onEdit,
+  onDelete,
   filterChildId,
   filterCategory,
   showCompleted = true,
@@ -462,7 +551,7 @@ export function PrintoutList({
             : "プリントはまだありません"}
         </p>
         <p className="text-base text-muted-foreground mt-2">
-          下のボタンからスキャンして追加しましょう!
+          下のボタンから画像を追加しましょう!
         </p>
       </div>
     )
@@ -480,6 +569,8 @@ export function PrintoutList({
             child={child}
             onToggleComplete={onToggleComplete}
             onTogglePin={onTogglePin}
+            onEdit={onEdit}
+            onDelete={onDelete}
           />
         )
       })}
